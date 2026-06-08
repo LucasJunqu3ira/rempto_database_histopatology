@@ -667,6 +667,30 @@ function renderDashboard(data){
   const raceCard = createCategoryCard('Race', data, raceKeys);
   dashboard.appendChild(raceCard);
 
+  const patientIdKeys = ['Patient ID','ID','id','PatientID'];
+  const hgsocCounts = data.reduce((acc, item) => {
+    const id = valueByKeys(item, patientIdKeys);
+    if(!id) return acc;
+    if(/^HGSOC_MP/i.test(id)) acc['HGSOC_MP'] = (acc['HGSOC_MP'] || 0) + 1;
+    else if(/^HGSOC_NIH/i.test(id)) acc['HGSOC_NIH'] = (acc['HGSOC_NIH'] || 0) + 1;
+    return acc;
+  }, {});
+  if(Object.keys(hgsocCounts).length){
+    const hgsocEntries = Object.entries(hgsocCounts).map(([label, value]) => ({ label, value }));
+    const hgsocCard = document.createElement('div');
+    hgsocCard.className = 'dashboard-card';
+    const hgsocHeading = document.createElement('h3');
+    hgsocHeading.textContent = 'HGSOC_MP vs HGSOC_NIH';
+    hgsocCard.appendChild(hgsocHeading);
+    hgsocCard.appendChild(createDonutChartElement('Distribuição de casos', hgsocEntries, {
+      chartRadius: 120,
+      strokeWidth: 32,
+      centerFontSize: 30,
+      legendFontSize: '1rem'
+    }));
+    dashboard.appendChild(hgsocCard);
+  }
+
   const comorbidityCard = createCategoryCard('Comorbidities', data, comorbidityKeys, {
     chartType: 'donut',
     chartRadius: 120,
@@ -723,6 +747,10 @@ function showScreen(screenId){
   });
 }
 
+const SUPABASE_URL = 'https://YOUR_SUPABASE_PROJECT_URL.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 function setupScreens(){
   const buttons = Array.from(document.querySelectorAll('.screenButton'));
   buttons.forEach(button=>{
@@ -734,259 +762,216 @@ function setupScreens(){
   });
 }
 
-function showLoginScreen(){
-  document.getElementById('screenNav').classList.add('hidden');
-  showAuthMode('login');
-  showScreen('screenLogin');
+function getAuthEmail(username){
+  if(!username) return '';
+  const trimmed = String(username).trim();
+  return trimmed.includes('@') ? trimmed : `${trimmed}@rempto.local`;
 }
 
-function showApp(){
-  const screenNav = document.getElementById('screenNav');
-  screenNav.classList.remove('hidden');
-  const adminButton = document.getElementById('adminButton');
-  const current = getCurrentUser();
-  if(current && current.role === 'admin'){
-    adminButton.classList.remove('hidden');
-    renderAdminPanel();
-  } else {
-    adminButton.classList.add('hidden');
+async function getSupabaseSession(){
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if(error) {
+    console.error('Supabase session error', error);
+    return null;
   }
-  showScreen('screenList');
+  return session;
 }
 
-function renderAdminPanel(){
-  renderPendingRequests();
-  renderRegisteredUsers();
+async function fetchProfileByUsername(username){
+  const { data, error } = await supabase.from('profiles')
+    .select('id, user_id, username, status, role, created_at')
+    .eq('username', username)
+    .maybeSingle();
+  if(error) return { error };
+  return { profile: data };
 }
 
-function renderPendingRequests(){
-  const pending = document.getElementById('pendingRequests');
-  if(!pending) return;
-  const users = getStoredUsers().filter(u=>u.status === 'pending');
-  pending.innerHTML = '';
-  if(!users.length){
-    pending.innerHTML = '<p>Não há cadastros pendentes.</p>';
-    return;
-  }
-  users.forEach(user=>{
-    const card = document.createElement('div');
-    card.className = 'pending-card';
-    const info = document.createElement('span');
-    info.textContent = user.username;
-    const actions = document.createElement('div');
-    actions.className = 'pending-actions';
-    const approve = document.createElement('button');
-    approve.className = 'approve';
-    approve.type = 'button';
-    approve.textContent = 'Aprovar';
-    approve.addEventListener('click', ()=>{
-      updateUserStatus(user.username, 'approved');
-      renderAdminPanel();
-    });
-    const reject = document.createElement('button');
-    reject.className = 'reject';
-    reject.type = 'button';
-    reject.textContent = 'Recusar';
-    reject.addEventListener('click', ()=>{
-      updateUserStatus(user.username, 'rejected');
-      renderAdminPanel();
-    });
-    const status = document.createElement('span');
-    status.className = 'status';
-    status.textContent = 'Pendente';
-    actions.appendChild(approve);
-    actions.appendChild(reject);
-    card.appendChild(info);
-    card.appendChild(actions);
-    card.appendChild(status);
-    pending.appendChild(card);
-  });
+async function fetchProfileByUserId(userId){
+  const { data, error } = await supabase.from('profiles')
+    .select('id, user_id, username, status, role, created_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if(error) return { error };
+  return { profile: data };
 }
 
-function renderRegisteredUsers(){
-  const container = document.getElementById('registeredUsers');
-  if(!container) return;
-  const users = getStoredUsers();
-  container.innerHTML = '';
-  if(!users.length){
-    container.innerHTML = '<p>Nenhum usuário cadastrado.</p>';
-    return;
+async function listProfiles(status){
+  let query = supabase.from('profiles')
+    .select('id, user_id, username, status, role, created_at')
+    .order('created_at', { ascending: false });
+  if(status){
+    query = query.eq('status', status);
   }
-  users.forEach(user=>{
-    const card = document.createElement('div');
-    card.className = 'user-card';
-    const info = document.createElement('div');
-    info.className = 'user-info';
-    const username = document.createElement('span');
-    username.textContent = `Usuário: ${user.username}`;
-    const role = document.createElement('span');
-    role.textContent = `Função: ${user.role || 'user'}`;
-    const status = document.createElement('span');
-    status.textContent = `Status: ${user.status || 'approved'}`;
-    info.appendChild(username);
-    info.appendChild(role);
-    info.appendChild(status);
-    const actions = document.createElement('div');
-    actions.className = 'user-actions';
-    const editButton = document.createElement('button');
-    editButton.className = 'edit';
-    editButton.type = 'button';
-    editButton.textContent = 'Editar';
-    editButton.addEventListener('click', ()=>{
-      openUserEditForm(user.username, card);
-    });
-    actions.appendChild(editButton);
-    card.appendChild(info);
-    card.appendChild(actions);
-    container.appendChild(card);
-  });
+  const { data, error } = await query;
+  if(error) return { error };
+  return { profiles: data || [] };
 }
 
-function openUserEditForm(username, card){
-  const users = getStoredUsers();
-  const user = users.find(u=>u.username === username);
-  if(!user) return;
-  card.innerHTML = '';
-  const form = document.createElement('div');
-  form.className = 'edit-form';
-
-  const usernameLabel = document.createElement('label');
-  usernameLabel.textContent = 'Usuário';
-  const usernameInput = document.createElement('input');
-  usernameInput.type = 'text';
-  usernameInput.value = user.username;
-  usernameLabel.appendChild(usernameInput);
-
-  const passwordLabel = document.createElement('label');
-  passwordLabel.textContent = 'Senha (deixe em branco para manter)';
-  const passwordInput = document.createElement('input');
-  passwordInput.type = 'password';
-  passwordLabel.appendChild(passwordInput);
-
-  const statusLabel = document.createElement('label');
-  statusLabel.textContent = 'Status';
-  const statusSelect = document.createElement('select');
-  ['pending','approved','rejected'].forEach(value=>{
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
-    statusSelect.appendChild(option);
-  });
-  statusSelect.value = user.status || 'approved';
-  statusLabel.appendChild(statusSelect);
-
-  const roleLabel = document.createElement('label');
-  roleLabel.textContent = 'Função';
-  const roleSelect = document.createElement('select');
-  ['user','admin'].forEach(value=>{
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
-    roleSelect.appendChild(option);
-  });
-  roleSelect.value = user.role || 'user';
-  if(user.username === 'admin'){
-    roleSelect.disabled = true;
-    statusSelect.disabled = true;
-  }
-  roleLabel.appendChild(roleSelect);
-
-  const actions = document.createElement('div');
-  actions.className = 'user-actions';
-  const saveButton = document.createElement('button');
-  saveButton.type = 'button';
-  saveButton.className = 'save';
-  saveButton.textContent = 'Salvar';
-  saveButton.addEventListener('click', ()=>{
-    saveUserEdits(user.username, usernameInput.value.trim(), passwordInput.value, statusSelect.value, roleSelect.value);
-  });
-  const cancelButton = document.createElement('button');
-  cancelButton.type = 'button';
-  cancelButton.className = 'cancel';
-  cancelButton.textContent = 'Cancelar';
-  cancelButton.addEventListener('click', ()=>{
-    renderAdminPanel();
-  });
-  actions.appendChild(saveButton);
-  actions.appendChild(cancelButton);
-
-  form.appendChild(usernameLabel);
-  form.appendChild(passwordLabel);
-  form.appendChild(statusLabel);
-  form.appendChild(roleLabel);
-  form.appendChild(actions);
-  card.appendChild(form);
+async function createProfile(userId, username){
+  const { data, error } = await supabase.from('profiles')
+    .insert({ user_id: userId, username, status: 'pending', role: 'user' })
+    .single();
+  if(error) return { error };
+  return { profile: data };
 }
 
-function saveUserEdits(originalUsername, newUsername, newPassword, newStatus, newRole){
-  const users = getStoredUsers();
-  const user = users.find(u=>u.username === originalUsername);
-  if(!user) return;
-  if(!newUsername){
-    alert('O nome de usuário não pode ficar vazio.');
-    return;
-  }
-  if(newUsername !== originalUsername && users.some(u=>u.username === newUsername)){
-    alert('Já existe um usuário com esse nome.');
-    return;
-  }
-  user.username = newUsername;
-  if(newPassword){
-    user.password = newPassword;
-  }
-  user.status = newStatus;
-  user.role = newRole;
-  saveStoredUsers(users);
-  if(getCurrentUser() && getCurrentUser().username === originalUsername){
-    saveCurrentUser(newUsername);
-  }
-  renderAdminPanel();
+async function updateProfileStatus(profileId, status){
+  const { error } = await supabase.from('profiles').update({ status }).eq('id', profileId);
+  if(error) console.error('Erro ao atualizar status', error);
 }
 
-function updateUserStatus(username, status){
-  const users = getStoredUsers();
-  const user = users.find(u=>u.username === username);
-  if(!user) return;
-  user.status = status;
-  saveStoredUsers(users);
+async function signOutSupabase(){
+  await supabase.auth.signOut();
+  clearCurrentUser();
 }
 
-function isAuthenticated(){
-  return sessionStorage.getItem('remptoAuthenticated') === 'true';
+function saveCurrentUser(current){
+  sessionStorage.setItem('remptoCurrentUser', JSON.stringify(current));
 }
 
 function getCurrentUser(){
-  const username = sessionStorage.getItem('remptoCurrentUser');
-  if(!username) return null;
-  return getStoredUsers().find(u=>u.username === username) || null;
-}
-
-function saveCurrentUser(username){
-  sessionStorage.setItem('remptoCurrentUser', username);
+  const json = sessionStorage.getItem('remptoCurrentUser');
+  if(!json) return null;
+  try{
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 }
 
 function clearCurrentUser(){
   sessionStorage.removeItem('remptoCurrentUser');
 }
 
-function ensureAdminUser(){
-  const users = getStoredUsers();
-  if(!users.some(u=>u.role === 'admin')){
-    users.push({username:'admin', password:'admin', role:'admin', status:'approved'});
-    saveStoredUsers(users);
+async function restoreSessionState(){
+  const session = await getSupabaseSession();
+  if(!session?.user) return null;
+  const { profile, error } = await fetchProfileByUserId(session.user.id);
+  if(error || !profile) {
+    await signOutSupabase();
+    return null;
   }
+  if(profile.status !== 'approved'){
+    await signOutSupabase();
+    return null;
+  }
+  const current = {
+    username: profile.username,
+    role: profile.role || 'user',
+    userId: profile.user_id,
+    profileId: profile.id
+  };
+  saveCurrentUser(current);
+  return current;
 }
 
-function getStoredUsers(){
-  try{
-    return JSON.parse(localStorage.getItem('remptoUsers') || '[]');
-  } catch {
-    return [];
-  }
+function showLoginScreen(){
+  document.getElementById('screenNav').classList.add('hidden');
+  showAuthMode('login');
+  showScreen('screenLogin');
 }
 
-function saveStoredUsers(users){
-  localStorage.setItem('remptoUsers', JSON.stringify(users));
+async function showApp(){
+  const screenNav = document.getElementById('screenNav');
+  screenNav.classList.remove('hidden');
+  const adminButton = document.getElementById('adminButton');
+  const current = getCurrentUser();
+  if(current && current.role === 'admin'){
+    adminButton.classList.remove('hidden');
+    await renderAdminPanel();
+  } else {
+    adminButton.classList.add('hidden');
+  }
+  showScreen('screenList');
+}
+
+async function renderAdminPanel(){
+  await renderPendingRequests();
+  await renderRegisteredUsers();
+}
+
+function createStatusBadge(status){
+  const badge = document.createElement('span');
+  badge.className = `status-badge status-${status}`;
+  badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+  return badge;
+}
+
+async function renderPendingRequests(){
+  const pending = document.getElementById('pendingRequests');
+  if(!pending) return;
+  const { profiles, error } = await listProfiles('pending');
+  pending.innerHTML = '';
+  if(error){
+    pending.innerHTML = '<p>Erro ao carregar cadastros pendentes.</p>';
+    return;
+  }
+  if(!profiles.length){
+    pending.innerHTML = '<p>Não há cadastros pendentes.</p>';
+    return;
+  }
+  profiles.forEach(profile => {
+    const card = document.createElement('div');
+    card.className = 'pending-card';
+    const info = document.createElement('span');
+    info.textContent = profile.username;
+    const actions = document.createElement('div');
+    actions.className = 'pending-actions';
+    const approve = document.createElement('button');
+    approve.className = 'approve';
+    approve.type = 'button';
+    approve.textContent = 'Aprovar';
+    approve.addEventListener('click', async () => {
+      await updateProfileStatus(profile.id, 'approved');
+      await renderAdminPanel();
+    });
+    const reject = document.createElement('button');
+    reject.className = 'reject';
+    reject.type = 'button';
+    reject.textContent = 'Recusar';
+    reject.addEventListener('click', async () => {
+      await updateProfileStatus(profile.id, 'rejected');
+      await renderAdminPanel();
+    });
+    actions.appendChild(approve);
+    actions.appendChild(reject);
+    card.appendChild(info);
+    card.appendChild(actions);
+    card.appendChild(createStatusBadge('pending'));
+    pending.appendChild(card);
+  });
+}
+
+async function renderRegisteredUsers(){
+  const container = document.getElementById('registeredUsers');
+  if(!container) return;
+  const { profiles, error } = await listProfiles();
+  container.innerHTML = '';
+  if(error){
+    container.innerHTML = '<p>Erro ao carregar usuários cadastrados.</p>';
+    return;
+  }
+  if(!profiles.length){
+    container.innerHTML = '<p>Nenhum usuário cadastrado.</p>';
+    return;
+  }
+  profiles.forEach(profile => {
+    const card = document.createElement('div');
+    card.className = 'user-card';
+    const info = document.createElement('div');
+    info.className = 'user-info';
+    const username = document.createElement('span');
+    username.textContent = `Usuário: ${profile.username}`;
+    const role = document.createElement('span');
+    role.textContent = `Função: ${profile.role || 'user'}`;
+    const status = document.createElement('span');
+    status.appendChild(createStatusBadge(profile.status || 'pending'));
+    info.appendChild(username);
+    info.appendChild(role);
+    info.appendChild(status);
+    card.appendChild(info);
+    container.appendChild(card);
+  });
 }
 
 function clearAuthFields(){
@@ -1013,75 +998,110 @@ function showAuthMode(mode){
   registerTab.classList.toggle('active', !isLogin);
 }
 
-function setupLogin(){
+function showLoginError(message){
+  const loginError = document.getElementById('loginError');
+  if(loginError) loginError.textContent = message;
+}
+
+function showRegisterError(message){
+  const registerError = document.getElementById('registerError');
+  if(registerError) registerError.textContent = message;
+}
+
+async function setupLogin(){
   const loginButton = document.getElementById('loginButton');
   const userInput = document.getElementById('loginUser');
   const passInput = document.getElementById('loginPass');
-  const loginError = document.getElementById('loginError');
   const registerButton = document.getElementById('registerButton');
   const registerUser = document.getElementById('registerUser');
   const registerPass = document.getElementById('registerPass');
   const registerConfirm = document.getElementById('registerConfirm');
-  const registerError = document.getElementById('registerError');
   const authTabLogin = document.getElementById('authTabLogin');
   const authTabRegister = document.getElementById('authTabRegister');
 
-  const submitLogin = () => {
+  async function submitLogin(){
     const username = userInput.value.trim();
     const password = passInput.value.trim();
     if(!username || !password){
-      loginError.textContent = 'Informe usuário e senha para continuar.';
+      showLoginError('Informe usuário e senha para continuar.');
       return;
     }
-    const users = getStoredUsers();
-    const user = users.find(u=>u.username === username && u.password === password);
+    const email = getAuthEmail(username);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if(error){
+      showLoginError('Usuário ou senha inválidos.');
+      return;
+    }
+    const user = data.user;
     if(!user){
-      loginError.textContent = 'Usuário ou senha inválidos.';
+      showLoginError('Não foi possível autenticar.');
       return;
     }
-    if(user.status === 'pending'){
-      loginError.textContent = 'Cadastro aguardando aprovação.';
+    const { profile, error: profileError } = await fetchProfileByUserId(user.id);
+    if(profileError || !profile){
+      await supabase.auth.signOut();
+      showLoginError('Perfil de usuário não encontrado.');
       return;
     }
-    if(user.status === 'rejected'){
-      loginError.textContent = 'Cadastro recusado. Entre em contato com o administrador.';
+    if(profile.status === 'pending'){
+      await supabase.auth.signOut();
+      showLoginError('Cadastro aguardando aprovação.');
       return;
     }
-    sessionStorage.setItem('remptoAuthenticated', 'true');
-    saveCurrentUser(username);
-    loginError.textContent = '';
+    if(profile.status === 'rejected'){
+      await supabase.auth.signOut();
+      showLoginError('Cadastro recusado. Entre em contato com o administrador.');
+      return;
+    }
     clearAuthFields();
-    showApp();
-  };
+    saveCurrentUser({ username: profile.username, role: profile.role || 'user', userId: user.id, profileId: profile.id });
+    await showApp();
+  }
 
-  const submitRegister = () => {
+  async function submitRegister(){
     const username = registerUser.value.trim();
     const password = registerPass.value.trim();
     const confirm = registerConfirm.value.trim();
     if(!username || !password || !confirm){
-      registerError.textContent = 'Preencha todos os campos para se cadastrar.';
+      showRegisterError('Preencha todos os campos para se cadastrar.');
       return;
     }
     if(password !== confirm){
-      registerError.textContent = 'As senhas não coincidem.';
-      return;
-    }
-    const users = getStoredUsers();
-    if(users.some(u=>u.username === username)){
-      registerError.textContent = 'Este usuário já existe.';
+      showRegisterError('As senhas não coincidem.');
       return;
     }
     if(username.toLowerCase() === 'admin'){
-      registerError.textContent = 'Nome de usuário inválido.';
+      showRegisterError('Nome de usuário inválido.');
       return;
     }
-    users.push({username, password, role:'user', status:'pending'});
-    saveStoredUsers(users);
-    registerError.textContent = 'Cadastro enviado para aprovação. Aguarde a aprovação do administrador.';
+    const { profile: existingProfile } = await fetchProfileByUsername(username);
+    if(existingProfile){
+      showRegisterError('Este usuário já existe.');
+      return;
+    }
+    const email = getAuthEmail(username);
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if(error){
+      showRegisterError(error.message || 'Erro ao cadastrar usuário.');
+      return;
+    }
+    const user = data.user;
+    if(!user){
+      showRegisterError('Erro ao criar conta.');
+      return;
+    }
+    const { profile, error: createError } = await createProfile(user.id, username);
+    if(createError){
+      showRegisterError('Erro ao salvar perfil de usuário.');
+      await supabase.auth.signOut();
+      return;
+    }
+    await supabase.auth.signOut();
+    showRegisterError('Cadastro enviado para aprovação. Aguarde a aprovação do administrador.');
     registerUser.value = '';
     registerPass.value = '';
     registerConfirm.value = '';
-  };
+  }
 
   authTabLogin.addEventListener('click', ()=>{
     showAuthMode('login');
@@ -1108,9 +1128,8 @@ function setupLogin(){
 function setupLogout(){
   const logoutButton = document.getElementById('logoutButton');
   if(!logoutButton) return;
-  logoutButton.addEventListener('click', ()=>{
-    sessionStorage.removeItem('remptoAuthenticated');
-    clearCurrentUser();
+  logoutButton.addEventListener('click', async ()=>{
+    await signOutSupabase();
     clearAuthFields();
     showAuthMode('login');
     showLoginScreen();
@@ -1122,12 +1141,12 @@ document.addEventListener('DOMContentLoaded',async ()=>{
   renderList(data);
   renderDashboard(data);
   setupFilter(data);
-  ensureAdminUser();
   setupScreens();
   setupLogin();
   setupLogout();
-  if(isAuthenticated()){
-    showApp();
+  const restored = await restoreSessionState();
+  if(restored){
+    await showApp();
   } else {
     showLoginScreen();
   }
