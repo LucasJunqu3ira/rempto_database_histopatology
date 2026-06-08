@@ -945,21 +945,21 @@ function updateUserStatus(username, status){
 }
 
 function isAuthenticated(){
-  return localStorage.getItem('remptoAuthenticated') === 'true';
+  return sessionStorage.getItem('remptoAuthenticated') === 'true';
 }
 
 function getCurrentUser(){
-  const username = localStorage.getItem('remptoCurrentUser');
+  const username = sessionStorage.getItem('remptoCurrentUser');
   if(!username) return null;
   return getStoredUsers().find(u=>u.username === username) || null;
 }
 
 function saveCurrentUser(username){
-  localStorage.setItem('remptoCurrentUser', username);
+  sessionStorage.setItem('remptoCurrentUser', username);
 }
 
 function clearCurrentUser(){
-  localStorage.removeItem('remptoCurrentUser');
+  sessionStorage.removeItem('remptoCurrentUser');
 }
 
 function ensureAdminUser(){
@@ -1040,7 +1040,7 @@ function setupLogin(){
       loginError.textContent = 'Cadastro recusado. Entre em contato com o administrador.';
       return;
     }
-    localStorage.setItem('remptoAuthenticated', 'true');
+    sessionStorage.setItem('remptoAuthenticated', 'true');
     saveCurrentUser(username);
     loginError.textContent = '';
     clearAuthFields();
@@ -1102,7 +1102,7 @@ function setupLogout(){
   const logoutButton = document.getElementById('logoutButton');
   if(!logoutButton) return;
   logoutButton.addEventListener('click', ()=>{
-    localStorage.removeItem('remptoAuthenticated');
+    sessionStorage.removeItem('remptoAuthenticated');
     clearCurrentUser();
     clearAuthFields();
     showAuthMode('login');
