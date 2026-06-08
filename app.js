@@ -255,14 +255,10 @@ function createCategoryCard(title, data, keys, options = {}){
     .sort((a,b)=>b[1]-a[1])
     .map(([label,value])=>({label,value}));
   const card = document.createElement('div');
-  card.className = 'dashboard-card expandable';
+  card.className = 'dashboard-card';
   const heading = document.createElement('h3');
   heading.textContent = title;
   card.appendChild(heading);
-  const hint = document.createElement('div');
-  hint.className = 'expand-hint';
-  hint.textContent = 'Clique para ampliar';
-  card.appendChild(hint);
   if(!entries.length){
     card.innerHTML += '<div class="empty-state">Nenhum dado disponível para este tópico.</div>';
     return card;
@@ -282,17 +278,7 @@ function createCategoryCard(title, data, keys, options = {}){
     body.appendChild(createBarChartElement(label, entries, data.length, chartOptions));
   }
   card.appendChild(body);
-  makeCardExpandable(card);
   return card;
-}
-
-function makeCardExpandable(card){
-  card.addEventListener('click', event=>{
-    if(event.target.closest('a')) return;
-    const expanded = card.classList.contains('expanded');
-    document.querySelectorAll('.dashboard-card.expanded').forEach(c=>c.classList.remove('expanded'));
-    if(!expanded) card.classList.add('expanded');
-  });
 }
 
 function createDonutChartElement(title, counts, options = {}){
@@ -437,7 +423,7 @@ function createBarChartElement(title, counts, total, options = {}){
   const height = counts.length * rowHeight + 60;
   const barMaxWidth = width - labelArea - 56;
   svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
-  svg.setAttribute('preserveAspectRatio','xMinYMin meet');
+  svg.setAttribute('preserveAspectRatio','xMidYMid meet');
   counts.forEach((count,index)=>{
     const y = index * rowHeight + 42;
     const barWidth = Math.max(24, Math.round((count.value / maxValue) * barMaxWidth));
@@ -478,12 +464,12 @@ function createColumnChartElement(title, counts, total, options = {}){
   const barCount = counts.length;
   const width = options.width || Math.max(520, barCount * 96);
   const height = options.height || 420;
-  const padding = {top:options.paddingTop || 36,right:options.paddingRight || 36,bottom:options.paddingBottom || 120,left:options.paddingLeft || 52};
+  const padding = {top:options.paddingTop || 36,right:options.paddingRight || 36,bottom:options.paddingBottom || 160,left:options.paddingLeft || 52};
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
   const maxValue = Math.max(...counts.map(c=>c.value),1);
   svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
-  svg.setAttribute('preserveAspectRatio','xMinYMin meet');
+  svg.setAttribute('preserveAspectRatio','xMidYMid meet');
   const barWidth = Math.min(76, innerWidth / barCount - 12);
   const rotateLabels = barCount > 5;
 
@@ -528,7 +514,7 @@ function createColumnChartElement(title, counts, total, options = {}){
       const labelFontSize = options.labelFontSize || 14;
       const lines = splitTextLines(count.label, options.labelWrap || 14);
       const lineHeight = labelFontSize * 1.4;
-      const labelY = height - padding.bottom - Math.max(0, lines.length - 1) * lineHeight - 8;
+      const labelY = height - padding.bottom + 8;
       const label = createWrappedSvgText(count.label, x + barWidth / 2, labelY, options.labelWrap || 14, 'middle');
       label.setAttribute('font-size', labelFontSize);
       svg.appendChild(label);
@@ -655,7 +641,6 @@ function renderDashboard(data){
   } else {
     ageCard.innerHTML += '<div class="empty-state">Não foi possível extrair valores de idade.</div>';
   }
-  makeCardExpandable(ageCard);
   dashboard.appendChild(ageCard);
 
   const stageCard = createCategoryCard('Tumor Stage', data, stageKeys, {
@@ -702,14 +687,10 @@ function renderDashboard(data){
     const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([label,value])=>({label,value}));
     const chartOptions = getChartOptionsForKey(key);
     const card = document.createElement('div');
-    card.className = 'dashboard-card expandable';
+    card.className = 'dashboard-card';
     const heading = document.createElement('h3');
     heading.textContent = key;
     card.appendChild(heading);
-    const hint = document.createElement('div');
-    hint.className = 'expand-hint';
-    hint.textContent = 'Clique para ampliar';
-    card.appendChild(hint);
     const chartType = getChartTypeForCount(entries.length);
     if(chartType === 'pie'){
       card.appendChild(createPieChartElement(`${key} por contagem`, entries, chartOptions));
@@ -718,7 +699,6 @@ function renderDashboard(data){
     } else {
       card.appendChild(createBarChartElement(`${key} por contagem`, entries, data.length, chartOptions));
     }
-    makeCardExpandable(card);
     dashboard.appendChild(card);
   });
 }
