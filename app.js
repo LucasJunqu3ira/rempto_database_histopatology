@@ -256,6 +256,7 @@ function createCategoryCard(title, data, keys, options = {}){
     .map(([label,value])=>({label,value}));
   const card = document.createElement('div');
   card.className = 'dashboard-card';
+  if(options.chartType === 'donut') card.classList.add('donut-card');
   const heading = document.createElement('h3');
   heading.textContent = title;
   card.appendChild(heading);
@@ -466,10 +467,10 @@ function createColumnChartElement(title, counts, total, options = {}){
   const height = options.height || 420;
   const padding = {top:options.paddingTop || 36,right:options.paddingRight || 36,bottom:options.paddingBottom || 160,left:options.paddingLeft || 52};
   const innerWidth = width - padding.left - padding.right;
-  const innerHeight = height - padding.top - padding.bottom;
-  const maxValue = Math.max(...counts.map(c=>c.value),1);
   svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
   svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+  const innerHeight = height - padding.top - padding.bottom;
+  const maxValue = Math.max(...counts.map(c=>c.value),1);
   const barWidth = Math.min(76, innerWidth / barCount - 12);
   const rotateLabels = barCount > 5;
 
@@ -492,7 +493,7 @@ function createColumnChartElement(title, counts, total, options = {}){
     valueLabel.setAttribute('y',y - 12);
     valueLabel.setAttribute('text-anchor','middle');
     valueLabel.setAttribute('fill','#111');
-    valueLabel.setAttribute('font-size', options.valueFontSize || 16);
+    valueLabel.setAttribute('font-size', options.valueFontSize || 22);
     valueLabel.setAttribute('font-weight','700');
     valueLabel.setAttribute('dominant-baseline', 'middle');
     valueLabel.textContent = count.value;
@@ -506,12 +507,12 @@ function createColumnChartElement(title, counts, total, options = {}){
       label.setAttribute('y',labelY);
       label.setAttribute('text-anchor','end');
       label.setAttribute('fill','#111');
-      label.setAttribute('font-size', options.labelFontSize || 14);
+      label.setAttribute('font-size', options.labelFontSize || 18);
       label.setAttribute('transform',`rotate(-45 ${labelX} ${labelY})`);
       label.textContent = count.label;
       svg.appendChild(label);
     } else {
-      const labelFontSize = options.labelFontSize || 14;
+      const labelFontSize = options.labelFontSize || 18;
       const lines = splitTextLines(count.label, options.labelWrap || 14);
       const lineHeight = labelFontSize * 1.4;
       const labelY = height - padding.bottom + 8;
@@ -644,13 +645,13 @@ function renderDashboard(data){
   dashboard.appendChild(ageCard);
 
   const stageCard = createCategoryCard('Tumor Stage', data, stageKeys, {
-    chartType: 'column',
+    chartType: 'bar',
     width: 900,
     height: 520,
     rowHeight: 120,
     labelArea: 300,
-    labelFontSize: 20,
-    valueFontSize: 24
+    labelFontSize: 50,
+    valueFontSize: 40
   });
   dashboard.appendChild(stageCard);
 
@@ -666,7 +667,13 @@ function renderDashboard(data){
   const raceCard = createCategoryCard('Race', data, raceKeys);
   dashboard.appendChild(raceCard);
 
-  const comorbidityCard = createCategoryCard('Comorbidities', data, comorbidityKeys, {chartType:'donut'});
+  const comorbidityCard = createCategoryCard('Comorbidities', data, comorbidityKeys, {
+    chartType: 'donut',
+    chartRadius: 120,
+    strokeWidth: 32,
+    centerFontSize: 30,
+    legendFontSize: '1rem'
+  });
   dashboard.appendChild(comorbidityCard);
 
   const platinumCard = createCategoryCard('Platinum', data, platinumKeys);
