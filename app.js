@@ -740,11 +740,16 @@ function showApp(){
   const current = getCurrentUser();
   if(current && current.role === 'admin'){
     adminButton.classList.remove('hidden');
-    renderPendingRequests();
+    renderAdminPanel();
   } else {
     adminButton.classList.add('hidden');
   }
   showScreen('screenList');
+}
+
+function renderAdminPanel(){
+  renderPendingRequests();
+  renderRegisteredUsers();
 }
 
 function renderPendingRequests(){
@@ -769,7 +774,7 @@ function renderPendingRequests(){
     approve.textContent = 'Aprovar';
     approve.addEventListener('click', ()=>{
       updateUserStatus(user.username, 'approved');
-      renderPendingRequests();
+      renderAdminPanel();
     });
     const reject = document.createElement('button');
     reject.className = 'reject';
@@ -777,7 +782,7 @@ function renderPendingRequests(){
     reject.textContent = 'Recusar';
     reject.addEventListener('click', ()=>{
       updateUserStatus(user.username, 'rejected');
-      renderPendingRequests();
+      renderAdminPanel();
     });
     const status = document.createElement('span');
     status.className = 'status';
@@ -789,6 +794,146 @@ function renderPendingRequests(){
     card.appendChild(status);
     pending.appendChild(card);
   });
+}
+
+function renderRegisteredUsers(){
+  const container = document.getElementById('registeredUsers');
+  if(!container) return;
+  const users = getStoredUsers();
+  container.innerHTML = '';
+  if(!users.length){
+    container.innerHTML = '<p>Nenhum usuário cadastrado.</p>';
+    return;
+  }
+  users.forEach(user=>{
+    const card = document.createElement('div');
+    card.className = 'user-card';
+    const info = document.createElement('div');
+    info.className = 'user-info';
+    const username = document.createElement('span');
+    username.textContent = `Usuário: ${user.username}`;
+    const role = document.createElement('span');
+    role.textContent = `Função: ${user.role || 'user'}`;
+    const status = document.createElement('span');
+    status.textContent = `Status: ${user.status || 'approved'}`;
+    info.appendChild(username);
+    info.appendChild(role);
+    info.appendChild(status);
+    const actions = document.createElement('div');
+    actions.className = 'user-actions';
+    const editButton = document.createElement('button');
+    editButton.className = 'edit';
+    editButton.type = 'button';
+    editButton.textContent = 'Editar';
+    editButton.addEventListener('click', ()=>{
+      openUserEditForm(user.username, card);
+    });
+    actions.appendChild(editButton);
+    card.appendChild(info);
+    card.appendChild(actions);
+    container.appendChild(card);
+  });
+}
+
+function openUserEditForm(username, card){
+  const users = getStoredUsers();
+  const user = users.find(u=>u.username === username);
+  if(!user) return;
+  card.innerHTML = '';
+  const form = document.createElement('div');
+  form.className = 'edit-form';
+
+  const usernameLabel = document.createElement('label');
+  usernameLabel.textContent = 'Usuário';
+  const usernameInput = document.createElement('input');
+  usernameInput.type = 'text';
+  usernameInput.value = user.username;
+  usernameLabel.appendChild(usernameInput);
+
+  const passwordLabel = document.createElement('label');
+  passwordLabel.textContent = 'Senha (deixe em branco para manter)';
+  const passwordInput = document.createElement('input');
+  passwordInput.type = 'password';
+  passwordLabel.appendChild(passwordInput);
+
+  const statusLabel = document.createElement('label');
+  statusLabel.textContent = 'Status';
+  const statusSelect = document.createElement('select');
+  ['pending','approved','rejected'].forEach(value=>{
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+    statusSelect.appendChild(option);
+  });
+  statusSelect.value = user.status || 'approved';
+  statusLabel.appendChild(statusSelect);
+
+  const roleLabel = document.createElement('label');
+  roleLabel.textContent = 'Função';
+  const roleSelect = document.createElement('select');
+  ['user','admin'].forEach(value=>{
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+    roleSelect.appendChild(option);
+  });
+  roleSelect.value = user.role || 'user';
+  if(user.username === 'admin'){
+    roleSelect.disabled = true;
+    statusSelect.disabled = true;
+  }
+  roleLabel.appendChild(roleSelect);
+
+  const actions = document.createElement('div');
+  actions.className = 'user-actions';
+  const saveButton = document.createElement('button');
+  saveButton.type = 'button';
+  saveButton.className = 'save';
+  saveButton.textContent = 'Salvar';
+  saveButton.addEventListener('click', ()=>{
+    saveUserEdits(user.username, usernameInput.value.trim(), passwordInput.value, statusSelect.value, roleSelect.value);
+  });
+  const cancelButton = document.createElement('button');
+  cancelButton.type = 'button';
+  cancelButton.className = 'cancel';
+  cancelButton.textContent = 'Cancelar';
+  cancelButton.addEventListener('click', ()=>{
+    renderAdminPanel();
+  });
+  actions.appendChild(saveButton);
+  actions.appendChild(cancelButton);
+
+  form.appendChild(usernameLabel);
+  form.appendChild(passwordLabel);
+  form.appendChild(statusLabel);
+  form.appendChild(roleLabel);
+  form.appendChild(actions);
+  card.appendChild(form);
+}
+
+function saveUserEdits(originalUsername, newUsername, newPassword, newStatus, newRole){
+  const users = getStoredUsers();
+  const user = users.find(u=>u.username === originalUsername);
+  if(!user) return;
+  if(!newUsername){
+    alert('O nome de usuário não pode ficar vazio.');
+    return;
+  }
+  if(newUsername !== originalUsername && users.some(u=>u.username === newUsername)){
+    alert('Já existe um usuário com esse nome.');
+    return;
+  }
+  user.username = newUsername;
+  if(newPassword){
+    user.password = newPassword;
+  }
+  user.status = newStatus;
+  user.role = newRole;
+  saveStoredUsers(users);
+  if(getCurrentUser() && getCurrentUser().username === originalUsername){
+    saveCurrentUser(newUsername);
+  }
+  renderAdminPanel();
 }
 
 function updateUserStatus(username, status){
